@@ -32,6 +32,10 @@
                 new AnalysisTarget("NServiceBus.Sagas.IHandleSagaNotFound", "Handle", "IMessageProcessingContext"),
                 new AnalysisTarget("NServiceBus.Pipeline.Behavior`1", "Invoke", null), // Context based on generic type argument
                 new AnalysisTarget("NServiceBus.Pipeline.IBehavior`2", "Invoke", null), // Context based on generic type argument
+                new AnalysisTarget("NServiceBus.MessageMutator.IMutateIncomingMessages", "MutateIncoming", "MutateIncomingMessageContext"),
+                new AnalysisTarget("NServiceBus.MessageMutator.IMutateIncomingTransportMessages", "MutateIncoming", "MutateIncomingTransportMessageContext"),
+                new AnalysisTarget("NServiceBus.MessageMutator.IMutateOutgoingMessages", "MutateOutgoing", "MutateOutgoingMessageContext"),
+                new AnalysisTarget("NServiceBus.MessageMutator.IMutateOutgoingTransportMessages", "MutateOutgoing", "MutateOutgoingTransportMessageContext"),
             };
 
             targetMethodNames = new HashSet<string>(targets.Select(target => target.MethodName).Distinct());

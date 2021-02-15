@@ -9,6 +9,7 @@ namespace NServiceBus.Core.Analyzer.Tests
     using Helpers;
     using Microsoft.CodeAnalysis;
     using Microsoft.CodeAnalysis.Diagnostics;
+    using NServiceBus.MessageMutator;
     using NServiceBus.Pipeline;
     using NServiceBus.Sagas;
     using NUnit.Framework;
@@ -20,6 +21,7 @@ namespace NServiceBus.Core.Analyzer.Tests
         [SuppressMessage("Style", "IDE0001:Simplify Names", Justification = "Clarity of different type names")]
         public void EachTypeHasABasicTest()
         {
+            // These abstract classes are only extended internally
             var ignoredTypes = new[] {
                 typeof(NServiceBus.Pipeline.ForkConnector<,>),
                 typeof(NServiceBus.Pipeline.PipelineTerminator<>),
@@ -42,21 +44,23 @@ namespace NServiceBus.Core.Analyzer.Tests
                 .OrderBy(t => t.FullName)
                 .ToArray();
 
-            TestContext.WriteLine("Types that should have analyzer support:");
-            foreach (var t in pipelineTypes)
+            var coveredTypes = pipelineTypes.Intersect(typesCoveredByThisTest).ToArray();
+            var missingTestCases = pipelineTypes.Except(typesCoveredByThisTest).ToArray();
+
+            TestContext.WriteLine($"Types covered by a {nameof(RunTestOnType)} TestCase to ensure analyzer support:");
+            foreach (var t in coveredTypes)
             {
                 TestContext.WriteLine(t.FullName);
             }
 
             TestContext.WriteLine();
-            TestContext.WriteLine($"Types covered by {nameof(RunTestOnType)}:");
-            foreach (var t in typesCoveredByThisTest)
+            TestContext.WriteLine($"Types missing a {nameof(RunTestOnType)} TestCase:");
+            foreach (var t in missingTestCases)
             {
                 TestContext.WriteLine(t.FullName);
             }
 
-            Assert.True(pipelineTypes.Intersect(typesCoveredByThisTest).Count() == pipelineTypes.Length,
-                $"One or more pipeline type(s) are not covered by the {nameof(RunTestOnType)} test in this class.");
+            Assert.AreEqual(0, missingTestCases.Length, $"One or more pipeline type(s) are not covered by the {nameof(RunTestOnType)} test in this class.");
         }
 
         [TestCase(typeof(IHandleMessages<>), "TestMessage", "Handle", "TestMessage message, IMessageHandlerContext context")]
@@ -65,11 +69,16 @@ namespace NServiceBus.Core.Analyzer.Tests
         [TestCase(typeof(IHandleSagaNotFound), null, "Handle", "object message, IMessageProcessingContext context")]
         [TestCase(typeof(Behavior<>), "IIncomingLogicalMessageContext", "Invoke", "IIncomingLogicalMessageContext context, Func<Task> next")]
         [TestCase(typeof(IBehavior<,>), "IIncomingPhysicalMessageContext, IIncomingLogicalMessageContext", "Invoke", "IIncomingPhysicalMessageContext context, Func<IIncomingLogicalMessageContext, Task> next")]
+        [TestCase(typeof(IMutateIncomingTransportMessages), null, "MutateIncoming", "MutateIncomingTransportMessageContext context")]
+        [TestCase(typeof(IMutateIncomingMessages), null, "MutateIncoming", "MutateIncomingMessageContext context")]
+        [TestCase(typeof(IMutateOutgoingTransportMessages), null, "MutateOutgoing", "MutateOutgoingTransportMessageContext context")]
+        [TestCase(typeof(IMutateOutgoingMessages), null, "MutateOutgoing", "MutateOutgoingMessageContext context")]
         public Task RunTestOnType(Type type, string genericTypeArgs, string methodName, string methodArguments)
         {
             const string sourceFormat =
         @"
 using NServiceBus;
+using NServiceBus.MessageMutator;
 using NServiceBus.Pipeline;
 using NServiceBus.Sagas;
 using System;
@@ -101,7 +110,7 @@ public class TestTimeout {}
                 code = code.Replace("public Task", "public override Task");
             }
 
-            var expected = NotForwardedAt(12, 16);
+            var expected = NotForwardedAt(13, 16);
 
             TestContext.WriteLine($"Source Code for test case: {type.FullName}:");
             TestContext.WriteLine(code);
@@ -114,18 +123,13 @@ public class TestTimeout {}
             var typeList = type.GetInterfaces().ToList();
             typeList.Add(type);
 
-            if (type == typeof(IAmStartedByMessages<>))
-            {
-
-            }
-
             foreach (var typeOrInterface in typeList.Distinct())
             {
                 foreach (var method in typeOrInterface.GetMethods())
                 {
                     foreach (var p in method.GetParameters())
                     {
-                        if (typeof(IPipelineContext).IsAssignableFrom(p.ParameterType) || typeof(IBehaviorContext).IsAssignableFrom(p.ParameterType))
+                        if (typeof(ICancellableContext).IsAssignableFrom(p.ParameterType))
                         {
                             return true;
                         }
